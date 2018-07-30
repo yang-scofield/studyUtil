@@ -106,7 +106,7 @@ public class ConsoleUtil {
      * @throws Exception
      */
     public static void study20(String userName, String password) throws Exception {
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 22; i++) {
             try{
                 Map<String, Object> ret = login(userName, password);
                 Header[] headers = (Header[]) ret.get("Set-Cookie");
@@ -517,7 +517,9 @@ public class ConsoleUtil {
         Header[] headers=null;
         Map<String,Map<String,Float>> afterStudyStudentScore=new HashMap<String,Map<String,Float>>();
         try {
-
+            System.out.println("登录课程20次");
+            study20(userName, password);
+            System.out.println("结束登录课程20次");
             Map<String, Object> ret =new HashMap<String,Object>();
             try{
                 ret= login(userName, password);
@@ -558,9 +560,7 @@ public class ConsoleUtil {
             studyTenMinute(studentId, courseMap,studentScore, headers);
             System.out.println("用户："+userName+" 课程学习结束");
             afterStudyStudentScore=getCourseScore(studentId,headers);
-            System.out.println("登录课程20次");
-            study20(userName, password);
-            System.out.println("结束登录课程20次");
+
         } catch (Exception e) {
             System.out.println("用户：" + userName + " 学习失败"+"分数："+afterStudyStudentScore);
             //e.printStackTrace();

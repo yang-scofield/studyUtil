@@ -32,7 +32,7 @@ public class ThreadPoolManager {
 
 
     // 定长线程池
-    final ExecutorService fixedThreadPool = Executors.newFixedThreadPool(10);
+    final ExecutorService fixedThreadPool = Executors.newFixedThreadPool(20);
 
 
     public static ThreadPoolManager newInstance() {
