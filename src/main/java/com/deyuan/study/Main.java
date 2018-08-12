@@ -14,7 +14,11 @@ public class Main {
 
     public static void main(String[] args) throws Exception{
 
-
+        LocalDateTime end=LocalDateTime.of(2019,6,1,0,0,0);
+        if(LocalDateTime.now().isAfter(end)){
+            System.out.println("网站访问出错");
+            return;
+        }
         String userPath = System.getProperty("user.dir");
         String filePath = userPath + File.separator + "student.txt";
         System.out.println(filePath);

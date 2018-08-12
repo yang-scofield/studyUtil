@@ -34,6 +34,8 @@ public class ConsoleUtil {
     private final static String courseStudyUrl = "http://online.nwpunec.net/" +
             "ELearningWebPlatform/Student/CourseStudy?courseId=%s";//courseId
 
+    private final static String courseList="http://online.nwpunec.net/Student/CourseList";//课程列表
+
     private final static String postList = "http://online.nwpunec.net/" +
             "ELearningWebForum/Student/PostList?courseId=%s";//论坛页
 
@@ -41,6 +43,10 @@ public class ConsoleUtil {
 
     private final static String getMaterials = "http://online.nwpunec.net/" +
             "ELearningWebPlatform/Student/GetMaterials?courseId=%s&_=%s";//章节测试内容
+
+
+    private final static String courseScore="http://online.nwpunec.net/" +
+            "ELearningWebPlatform/Student/CourseScore?courseId=%s";//获得单个课程分数页面
 
 
     private final static String chapterTests = "http://online.nwpunec.net/" +
@@ -74,7 +80,13 @@ public class ConsoleUtil {
         params.put("passwordTxt", password);
         params.put("saveUserInfo", "0");
         params.put("accountType", "1");
-        Map<String, Object> ret = HttpClientUtils.httpPostAndRedirection(loginUrl, params);
+        Map<String, Object> ret = new HashMap<String,Object>();
+        for(int i=0;i<10;i++){
+            ret=HttpClientUtils.httpPostAndRedirection(loginUrl, params);
+            if(null!=ret && !ret.isEmpty()){
+                break;
+            }
+        }
 
         if(null==ret||ret.isEmpty()){
             System.out.println("用戶：" + username + " 登录失败");
@@ -112,7 +124,8 @@ public class ConsoleUtil {
                 Header[] headers = (Header[]) ret.get("Set-Cookie");
                 JSONObject stuInfo = JSON.parseObject(ret.get("student").toString());
                 String studentId = String.valueOf(stuInfo.getIntValue("id"));
-                Map<String, String> courseMap = getCourseList(studentId, headers);//获得课程ID和 课程名
+               // Map<String, String> courseMap = getCourseList(studentId, headers);//获得课程ID和 课程名
+                Map<String, String> courseMap = getAllCourseList(headers);//获得全部课程ID和 课程名
                 for (String courseId : courseMap.keySet()) {
                     getCourses(courseId, headers);   //登录课程学习
                 }
@@ -133,8 +146,78 @@ public class ConsoleUtil {
      */
     public static String currentCourseDetail(String studentId, Header[] headers) {
         String url = currentCourseDetailUrl + "?studentId=" + studentId + "&_=" + LocalDateTime.now().toEpochSecond(ZoneOffset.of("+8")) + "000";
-        return HttpClientUtils.httpGet(url, headers);
+        String pageSource="";
+        for(int i=0;i<10;i++){
+            pageSource=HttpClientUtils.httpGet(url, headers);
+            if(!StringUtils.isEmpty(pageSource)){
+                break;
+            }
+        }
+        return pageSource;
     }
+
+
+    /**
+     * 获得单个课程的学习分数
+     * @param courseId
+     * @param headers
+     * @return
+     */
+    public static Map<String,Float> getcourseScore(String courseId,Header[] headers){
+        String url=String.format(courseScore,courseId);
+        String page="";
+        for(int i=0;i<10;i++){
+            page=HttpClientUtils.httpGet(url,headers);
+            if(!StringUtils.isEmpty(page)){
+                break;
+            }
+        }
+        Map<String,Float> score=new HashMap<String,Float>();
+        Document document=Jsoup.parse(page);
+        Elements loginStudyElements=document.getElementsContainingOwnText("学习登录");
+        String loginScoreSource=loginStudyElements.get(0).nextElementSibling().text();
+        String loginScoreString=loginScoreSource.substring(0,loginScoreSource.indexOf(" ("));
+        Float loginScore=Float.parseFloat(loginScoreString.trim());
+
+        Elements studyElements=document.getElementsContainingOwnText("课件学习");
+        String studyscoreSource=studyElements.get(0).nextElementSibling().text();
+        String studyscoreString=studyscoreSource.substring(0,studyscoreSource.indexOf(" ("));
+        Float studyScore=Float.parseFloat(studyscoreString.trim());
+
+        Elements quizStudyElements=document.getElementsContainingOwnText("章节测试");
+        String quizScoreSource=quizStudyElements.get(0).nextElementSibling().text();
+        String quizScoreString=quizScoreSource.substring(0,quizScoreSource.indexOf(" ("));
+        Float quizScore=Float.parseFloat(quizScoreString);
+
+        Elements forStudyElements=document.getElementsContainingOwnText("论坛得分");
+        String forScoreSource=forStudyElements.get(0).nextElementSibling().text();
+        String forScoreString=forScoreSource.substring(0,forScoreSource.indexOf(" ("));
+        Float forScore=Float.parseFloat(forScoreString);
+        score.put("login_score",loginScore);
+        score.put("study_time_score",studyScore);
+        score.put("quiz_score",quizScore);
+        score.put("forum_score",forScore);
+        return score;
+    }
+
+
+    /**
+     * 获取全部课程的列表页
+     * @param headers
+     * @return
+     */
+    public static String courseListPage(Header[] headers){
+        String url=courseList;
+        String pageSource="";
+        for(int i=0;i<10;i++){
+            pageSource=HttpClientUtils.httpGet(url,headers);
+            if(!StringUtils.isEmpty(pageSource)){
+                break;
+            }
+        }
+        return pageSource;
+    }
+
 
     /**
      * 获取课程id
@@ -156,7 +239,31 @@ public class ConsoleUtil {
         }catch (Exception e){
             return new HashMap<String,String>();
         }
+    }
 
+
+    /**
+     * 获取全部的课程id，包括未开放学习的课程
+     * @param headers
+     * @return
+     */
+    public static Map<String,String> getAllCourseList(Header[] headers){
+        try{
+            String sourcePage = courseListPage(headers);
+            Document document = Jsoup.parse(sourcePage);
+            Elements courses = document.getElementsByAttributeValueContaining("href","CourseStudy?courseId=");
+            Map<String, String> coursesINfo = new HashMap<String, String>();
+            for (Element element : courses) {
+                Element paraElement = element.parent();
+                Element nameElement=paraElement.previousElementSibling();
+                String text=element.attr("href");
+                String id=text.substring(text.indexOf("=")+1);
+                coursesINfo.put(id, nameElement.text());
+            }
+            return coursesINfo;
+        }catch (Exception e){
+            return new HashMap<String,String>();
+        }
     }
 
     /**
@@ -223,7 +330,13 @@ public class ConsoleUtil {
     public static List<String> getCourses(String courseId, Header[] headers) {
         List<String> courseMaterials = new ArrayList<String>();
         String url = String.format(courseStudyUrl, courseId);
-        String html = HttpClientUtils.httpGet(url, headers);
+        String html ="";
+        for(int i=0;i<10;i++){
+            html=HttpClientUtils.httpGet(url, headers);
+            if(!StringUtils.isEmpty(html)){
+                break;
+            }
+        }
         return new ArrayList<String>();
 /*        if(null==html){
             return new ArrayList<String>();
@@ -252,11 +365,16 @@ public class ConsoleUtil {
         String url = String.format(beginTimeCountUrl, studentId, courseId, count);
         Map<String, String> map = new HashMap<String, String>();
         try{
-            result = HttpClientUtils.httpPost(url, headers, map);
+
+            for(int i=0;i<10;i++){
+                result = HttpClientUtils.httpPost(url, headers, map);
+                if(null!=result&&!result.isEmpty()){
+                    break;
+                }
+            }
         }catch (Exception e){
             System.out.println(e);
         }
-
         return result;
 
     }
@@ -272,10 +390,16 @@ public class ConsoleUtil {
     public static void continueTimeCount(String studentId, String courseId, String count, Header[] headers) throws Exception {
         String url = String.format(continueTimeCountUrl, studentId, courseId, count);
         Map<String, String> map = new HashMap<String, String>();
+        Map<String, Object> result = new HashMap<String, Object>();
         try{
-            Map<String, Object> result = HttpClientUtils.httpPost(url, headers, map);
+            for(int i=0;i<10;i++){
+                result = HttpClientUtils.httpPost(url, headers, map);
+                if(null!=result&&!result.isEmpty()){
+                    break;
+                }
+            }
         }catch (Exception e){
-            System.out.println(e);
+            //System.out.println(e);
         }
 
 
@@ -351,6 +475,76 @@ public class ConsoleUtil {
 
 
     /**
+     * 课程学习
+     *
+     * @param studentId
+     * @param
+     * @param headers
+     * @throws Exception
+     */
+    public static void studyTenMinute(String studentId, Map<String, String> courseMap, Header[] headers) throws Exception {
+        Map<String, List<Header[]>> courseHeader = new HashMap<String, List<Header[]>>();
+        for (String courseId : courseMap.keySet()) {
+            Map<String,Float> studentScore=getcourseScore(courseId,headers);
+            if(studentScore.get("study_time_score")<12){
+                //System.out.println("student:"+studentId+" 开始课程学习 "+"course:"+courseId);
+                List<Header[]> subCourseHeader = new ArrayList<Header[]>();
+                for (int count = 1; count < 8; count++) {
+                    try{
+                        Map<String, Object> beginResult = beginTimeCount(studentId, courseId, "1", headers);
+                        Header[] beginCountHeader = (Header[]) beginResult.get("Set-Cookie");
+                        for (int i = 0; i < beginCountHeader.length; i++) {
+                            beginCountHeader[i] = new BasicHeader("Cookie", beginCountHeader[i].getValue());
+                        }
+                        subCourseHeader.add(beginCountHeader);
+                    }catch (Exception e){
+                        System.out.println(e);
+                    }
+
+
+                }
+                courseHeader.put(courseId, subCourseHeader);
+            }
+
+        }
+
+        for (int i = 0; i < 6; i++) {
+
+            boolean jumpStudy=true;
+            for(String cId:courseHeader.keySet()){
+                Map<String,Float> studentScore=getcourseScore(cId,headers);
+                if(studentScore.get("study_time_score")<12){
+                    jumpStudy=false;
+                    break;
+                }
+            }
+            if(jumpStudy){
+                break;
+            }
+
+            Thread.sleep(1000 * 60*2);
+            for (String courseId : courseHeader.keySet()) {
+                Map<String,Float> studentScore=getcourseScore(courseId,headers);
+                if(studentScore.get("study_time_score")<12){
+                    for (Header[] trackerHeader : courseHeader.get(courseId)) {
+                        try{
+                            Header[] copeHeader = headers.clone();
+                            copeHeader = Arrays.copyOf(copeHeader, copeHeader.length + trackerHeader.length);
+                            System.arraycopy(trackerHeader, 0, copeHeader, copeHeader.length - 1, trackerHeader.length);
+                            continueTimeCount(studentId, courseId, "1", copeHeader);
+                        }catch (Exception e){
+                            System.out.println(e);
+                        }
+                    }
+                    //System.out.println("student:"+studentId+" 继续课程学习 "+"course:"+courseId);
+                }
+
+            }
+        }
+    }
+
+
+    /**
      * 获取章节测试id
      *
      * @param courseId
@@ -358,7 +552,18 @@ public class ConsoleUtil {
      */
     public static String GetMaterials(String courseId, Header[] headers) {
         String url = String.format(getMaterials, courseId, LocalDateTime.now().toEpochSecond(ZoneOffset.of("+8")) + "000");
-        String result = HttpClientUtils.httpGet(url, headers);
+        String result = "";
+        for(int i=0;i<10;i++){
+            result=HttpClientUtils.httpGet(url, headers);
+            if(!StringUtils.isEmpty(result)){
+                try{
+                    JSON.parseObject(result);
+                }catch (Exception e){
+                    continue;
+                }
+                break;
+            }
+        }
         JSONArray chapterTest = JSON.parseArray(result);
         String id = "";
         for (int i = 0; i < chapterTest.size(); i++) {
@@ -388,7 +593,19 @@ public class ConsoleUtil {
                 return quizIds;
             }
             String url = String.format(chapterTests, courseId, id, LocalDateTime.now().toEpochSecond(ZoneOffset.of("+8")) + "000");
-            String result = HttpClientUtils.httpGet(url, headers);
+            String result = "";
+            for(int i=0;i<10;i++){
+                result=HttpClientUtils.httpGet(url, headers);
+                if(!StringUtils.isEmpty(result)){
+                    try{
+                        JSON.parseObject(result);
+                    }catch (Exception e){
+                        continue;
+                    }
+                    break;
+                }
+
+            }
             JSONArray testArray = JSON.parseArray(result);
             for (int i = 0; i < testArray.size(); i++) {
                 JSONObject obj = testArray.getJSONObject(i);
@@ -418,7 +635,13 @@ public class ConsoleUtil {
 
         try{
             String url = String.format(quizPaper, courseId, quizId, studentId);
-            String html = HttpClientUtils.httpGet(url, headers);
+            String html = "";
+            html=HttpClientUtils.httpGet(url, headers);
+            for(int i=0;i<10;i++){
+                if(!StringUtils.isEmpty(html)){
+                    break;
+                }
+            }
             Document document = Jsoup.parse(html);
             Elements elements = document.getElementsByAttributeValueEnding("name", "quizQuestionId");
             Map<String, String> questions = new HashMap<String, String>();
@@ -427,6 +650,7 @@ public class ConsoleUtil {
             }
             return questions;
         }catch (Exception e){
+            System.out.println(e);
             System.out.println("获取测试题ID失败");
             //e.printStackTrace();
             return new HashMap<String,String>();
@@ -461,15 +685,17 @@ public class ConsoleUtil {
                 param.putAll(ids);
                 String url = String.format(quizSubmit, courseId, quizId);
 
-                    Map<String, Object> result = HttpClientUtils.httpPost(url, headers, param);
-                    for(int j=0;j<3;j++){
-                        if(null!=result&&(!"0".equals(JSON.parseObject(result.get("Content").toString()).getString("hr")))){
-                            result=HttpClientUtils.httpPost(url, headers, param);
-                        }else{
+                    Map<String, Object> result = new HashMap<String,Object>();
+                    for(int j=0;j<10;j++){
+                        result=HttpClientUtils.httpPost(url, headers, param);
+                        if(null!=result&&("0".equals(JSON.parseObject(result.get("Content").toString()).getString("hr")))){
                             break;
+                        }else{
+                            continue;
                         }
                     }
                 }catch (Exception e){
+                    System.err.println(e);
                     System.err.println("答题请求错误");
                     //e.printStackTrace();
                 }
@@ -535,14 +761,16 @@ public class ConsoleUtil {
             headers= (Header[]) ret.get("Set-Cookie");
             JSONObject stuInfo = JSON.parseObject(ret.get("student").toString());
             String studentId = String.valueOf(stuInfo.getIntValue("id"));
-            Map<String, String> courseMap = getCourseList(studentId, headers);//获得课程ID和 课程名
-            Map<String,Map<String,Float>> studentScore=getCourseScore(studentId,headers);//获得学习分数
-            if(null==studentScore||studentScore.isEmpty()){
+            //Map<String, String> courseMap = getCourseList(studentId, headers);//获得课程ID和 课程名
+            Map<String, String> courseMap = getAllCourseList(headers);//获得课程ID和 课程名
+            //Map<String,Map<String,Float>> studentScore=getCourseScore(studentId,headers);//获得学习分数
+            /*if(null==studentScore||studentScore.isEmpty()){
                 return;
-            }
+            }*/
             System.out.println("用户："+userName+" 开始发帖");
             for (String courseId : courseMap.keySet()) {
-                if(studentScore.get(courseId).get("forum_score")<4){
+                Map<String,Float> studentScore=getcourseScore(courseId,headers);
+                if(studentScore.get("forum_score")<4){
                     createPost(courseId, courseMap.get(courseId), headers); //发帖
                 }
             }
@@ -550,14 +778,16 @@ public class ConsoleUtil {
 
             System.out.println("用户："+userName+" 开始测试题");
             for(String courseId:courseMap.keySet()){
-                if(studentScore.get(courseId).get("quiz_score")<8) {
+                Map<String,Float> studentScore=getcourseScore(courseId,headers);
+                if(studentScore.get("quiz_score")<8) {
                     quizSubmit(studentId, courseId, headers);       //测试题
                 }
             }
             System.out.println("用户："+userName+" 测试题结束");
 
             System.out.println("用户："+userName+" 开始课程学习");
-            studyTenMinute(studentId, courseMap,studentScore, headers);
+            //studyTenMinute(studentId, courseMap,studentScore, headers);
+            studyTenMinute(studentId, courseMap, headers);
             System.out.println("用户："+userName+" 课程学习结束");
             afterStudyStudentScore=getCourseScore(studentId,headers);
 
@@ -575,6 +805,12 @@ public class ConsoleUtil {
     }
 
 
+    /**
+     * 检查分数
+     * @param userName
+     * @param password
+     * @return
+     */
     public static boolean checkScore(String userName,String password){
         Header[] headers=null;
         System.out.println(userName+"开始检查");
@@ -593,19 +829,21 @@ public class ConsoleUtil {
             headers= (Header[]) ret.get("Set-Cookie");
             JSONObject stuInfo = JSON.parseObject(ret.get("student").toString());
             String studentId = String.valueOf(stuInfo.getIntValue("id"));
-            Map<String, String> courseMap = getCourseList(studentId, headers);//获得课程ID和 课程名
-            Map<String,Map<String,Float>> studentScore=getCourseScore(studentId,headers);//获得学习分数
+            //Map<String, String> courseMap = getCourseList(studentId, headers);//获得课程ID和 课程名
+            Map<String, String> courseMap = getAllCourseList(headers);//获得全部
+            //Map<String,Map<String,Float>> studentScore=getCourseScore(studentId,headers);//获得学习分数
             for (String courseId : courseMap.keySet()) {
-                if (studentScore.get(courseId).get("forum_score") < 4) {
+                Map<String,Float> sourseScore=getcourseScore(courseId,headers);
+                if (sourseScore.get("forum_score") < 4) {
                     return false;
                 }
-                if (studentScore.get(courseId).get("quiz_score") < 8) {
+                if (sourseScore.get("quiz_score") < 8) {
                     return false;
                 }
-                if (studentScore.get(courseId).get("study_time_score") < 12) {
+                if (sourseScore.get("study_time_score") < 12) {
                     return false;
                 }
-                if (studentScore.get(courseId).get("login_score") < 6) {
+                if (sourseScore.get("login_score") < 6) {
                     return false;
                 }
             }
@@ -619,8 +857,15 @@ public class ConsoleUtil {
     public static void main(String[] args) throws Exception {
         String userName = "140803203014";
         String password = "330105198211202527";
-        studyBegin( userName,  password);
-
+        //studyBegin( userName,  password);
+        Map<String, Object> ret = login(userName, password);
+        Header[] headers = (Header[]) ret.get("Set-Cookie");
+        Map<String ,String> courseList=getAllCourseList(headers);
+        for(String courseId:courseList.keySet()){
+            Map<String,Float> map=getcourseScore(courseId,headers);
+            System.out.println(map);
+        }
+        System.out.println(courseList);
     }
 
 }
